@@ -5,18 +5,21 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.5.0 <=0.9.0;
 
-// import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import {PriceConverter} from "./PriceConverter.sol"; //here PriceConverter is a library
 
-error NotOwner();
+error FundMe__NotOwner();
 
 contract FundMe {
     using PriceConverter for uint256; //"using PriceConverter for uint256" allows the uint256 data type to access additional conversion functionality provided by the PriceConverter library.
 
     address public immutable i_contractOwner; // immutable variables are named with "i_" in the beginning to denote that they  are immutable
 
-    constructor() {
+    AggregatorV3Interface private s_priceFeed;
+
+    constructor(address priceFeed) { //the input parameter 'priceFeed' is the address of AggregatorV3Interface that comes from the DeployFundMe contract.
         i_contractOwner = msg.sender;
+        s_priceFeed = AggregatorV3Interface(priceFeed); // the input parameter(address of AggregatorV3Interface) is assigned to s_priceFeed
     }
 
     uint256 public constant MINIMUM_USD = 3e18; //constant variables have a different naming convention typically you'll want to do them all caps
@@ -27,14 +30,16 @@ contract FundMe {
 
     function fund() public payable {
         require(
-            msg.value.getConversionRate() >= MINIMUM_USD,
+            msg.value.getConversionRate(s_priceFeed) >= MINIMUM_USD,
             "Not enough fund"
         );
         funders.push(msg.sender);
         addressToAmountFunded[msg.sender] =
             addressToAmountFunded[msg.sender] +
-            msg.value.getConversionRate();
+            msg.value.getConversionRate(s_priceFeed);
     }
+
+    
 
     function withdraw() public onlyOwner {
         //onlyOwner modifier first checks if the msg.sender is the owner or not
@@ -58,7 +63,7 @@ contract FundMe {
     modifier onlyOwner() {
         // require(msg.sender == i_contractOwner, "You must be the owner to withdraw"); //this consumes alot of gas
         if (msg.sender != i_contractOwner) {
-            revert NotOwner();
+            revert FundMe__NotOwner();
         } // this is slightly more gas efficient than 'require'
 
         _; /*_; takes the code execution where the modifier is called. if in this modifier _; was called before require()
