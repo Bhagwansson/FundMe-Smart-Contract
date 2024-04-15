@@ -7,6 +7,7 @@ pragma solidity >=0.5.0 <=0.9.0;
 
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import {PriceConverter} from "./PriceConverter.sol"; //here PriceConverter is a library
+import {console} from "forge-std/console.sol";
 
 error FundMe__NotOwner();
 
@@ -24,19 +25,18 @@ contract FundMe {
 
     uint256 public constant MINIMUM_USD = 3e18; //constant variables have a different naming convention typically you'll want to do them all caps
 
-    mapping(address => uint256) public addressToAmountFunded;
+    mapping(address => uint256) private s_addressToAmountFunded;
 
-    address[] public funders;
+    address[] private s_funders;
 
     function fund() public payable {
+            console.log("Converted price of amount funded",msg.value.getConversionRate(s_priceFeed));
         require(
             msg.value.getConversionRate(s_priceFeed) >= MINIMUM_USD,
             "Not enough fund"
         );
-        funders.push(msg.sender);
-        addressToAmountFunded[msg.sender] =
-            addressToAmountFunded[msg.sender] +
-            msg.value.getConversionRate(s_priceFeed);
+        s_funders.push(msg.sender);
+        s_addressToAmountFunded[msg.sender] += msg.value;
     }
 
     
@@ -45,13 +45,13 @@ contract FundMe {
         //onlyOwner modifier first checks if the msg.sender is the owner or not
         for (
             uint256 funderIndex = 0;
-            funderIndex < funders.length;
+            funderIndex < s_funders.length;
             funderIndex++ //loop through all the funders in funders[] array
         ) {
-            address funder = funders[funderIndex]; // gets the address of the current funder
-            addressToAmountFunded[funder] = 0; // resets the  funded by the current funder to zero
+            address funder = s_funders[funderIndex]; // gets the address of the current funder
+            s_addressToAmountFunded[funder] = 0; // resets the  funded by the current funder to zero
         }
-        funders = new address[](0); // resets the funders array to an empty array starting from zeroth index
+        s_funders = new address[](0); // resets the funders array to an empty array starting from zeroth index
 
         // Call a function on the sender's address and send the entire balance of this contract as Ether.
         (bool callSuccess, ) = payable(msg.sender).call{
@@ -85,6 +85,24 @@ contract FundMe {
         // The payable modifier indicates that the function can receive Ether.
         fund(); // Call the fund() function to process the incoming Ether payment.
     }
+
+
+    function getVersion() public view returns (uint256) {
+        return s_priceFeed.version();
+    }
+
+
+    // (Getters)
+    function getAddressToAmountFunded(address fundingAddress) external view returns (uint256) {
+        return s_addressToAmountFunded[fundingAddress];
+         
+
+    }
+
+    function getFunder(uint256 index) external view returns (address) {
+        return s_funders[index];
+    }
+
 }
 
 /*
